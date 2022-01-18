@@ -14,6 +14,9 @@ import IterativeSolvers: cg!, cg
 import LinearAlgebra: mul!, ldiv!
 import Base: size
 
+using BenchmarkTools
+using Profile
+
 ## PDEs type
 abstract type AbstractPDEs end
 struct NonlinElliptic2d <: AbstractPDEs
@@ -114,17 +117,29 @@ end
 # struct that stores the factor of Theta_train
 abstract type implicit_mtx end
 
-struct approx_Theta_train{Tv,Ti} <: implicit_mtx
+# struct approx_Theta_train{Tv,Ti} <: implicit_mtx
+#     P::Vector{Ti}
+#     U::SparseMatrixCSC{Tv,Ti}
+#     δ_coefs::Vector{Tv}
+#     N_boundary::Ti
+#     N_domain::Ti
+# end
+
+struct approx_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     P::Vector{Ti}
-    U::SparseMatrixCSC{Tv,Ti}
+    U::Tmtx
     δ_coefs::Vector{Tv}
     N_boundary::Ti
     N_domain::Ti
 end
 
-struct precond_Theta_train{Tv,Ti} <: implicit_mtx
+# struct precond_Theta_train{Tv,Ti} <: implicit_mtx
+#     P::Vector{Ti}
+#     U::SparseMatrixCSC{Tv,Ti}
+# end
+struct precond_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     P::Vector{Ti}
-    U::SparseMatrixCSC{Tv,Ti}
+    U::Tmtx
 end
 
 function size(A::approx_Theta_train, num)
@@ -136,8 +151,8 @@ function mul!(x, Θtrain::approx_Theta_train, b)
     temp = Θtrain.U'\(Θtrain.U\temp[Θtrain.P])
     temp[Θtrain.P] = temp
 
-    x[1:Θtrain.N_boundary] = temp[1:Θtrain.N_boundary]
-    x[Θtrain.N_boundary+1:end] = Θtrain.δ_coefs.*temp[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] + temp[Θtrain.N_boundary+Θtrain.N_domain+1:end]
+    @views x[1:Θtrain.N_boundary] = temp[1:Θtrain.N_boundary]
+    @views x[Θtrain.N_boundary+1:end] .= Θtrain.δ_coefs.*temp[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] .+ temp[Θtrain.N_boundary+Θtrain.N_domain+1:end]
 end
 
 function ldiv!(x, precond::precond_Theta_train, b)
@@ -180,6 +195,8 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
     U_bigΘ = explicit_bigΘ.U
     P_bigΘ = explicit_bigΘ.P
 
+    Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, zeros(N_domain),N_boundary,N_domain)
+
     for step in 1:GNsteps
         
         @printf "[Current GN step] %d\n" step
@@ -204,13 +221,16 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
 
         U = explicit_factor.U
         P = explicit_factor.P
-        rhs_now = vcat(bdy, rhs+eqn.α*(eqn.m-1)*sol_now.^eqn.m)
+        rhs_now = vcat(bdy, rhs.+eqn.α*(eqn.m-1)*sol_now.^eqn.m)
 
         # use the approximate solution as the initial point for the pCG iteration
         sol = U*(U'*rhs_now[P])
         sol[P] = sol
         # pcg step for Theta_train\rhs
-        Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, δ_coefs_int,N_boundary,N_domain)
+
+        @time Θtrain.δ_coefs .= δ_coefs_int
+        # Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, δ_coefs_int,N_boundary,N_domain)
+
         precond = precond_Theta_train(P,U)
         @printf "[pcg started]\n"
         @time sol, ch = cg!(sol, Θtrain, rhs_now; Pl = precond, log=true, reltol=1e-5)
@@ -220,16 +240,16 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
         temp = vcat(sol[1:N_boundary], δ_coefs_int .* sol[N_boundary+1:end], sol[N_boundary+1:end])
         temp = U_bigΘ'\(U_bigΘ\temp[P_bigΘ]) 
         temp[P_bigΘ] = temp
-        sol_now = temp[N_boundary+1:N_domain+N_boundary] 
+        @views sol_now = temp[N_boundary+1:N_domain+N_boundary] 
     end
     return sol_now
 end
 
 
 ############# main ################
-α = 1.0;
-m = 3;
-Ω = [[0,1] [0,1]]
+const α = 1.0;
+const m = 3;
+const Ω = [[0,1] [0,1]]
 # ground truth solution
 const freq = 20
 const s = 3
