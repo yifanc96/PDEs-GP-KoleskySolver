@@ -286,7 +286,7 @@ end
 @printf "[solver started] NonlinElliptic2d\n"
 eqn = NonlinElliptic2d(α,m,Ω,fun_bdy,fun_rhs)
 
-h_in = 0.01; h_bd = h_in
+h_in = 0.005; h_bd = h_in
 X_domain, X_boundary = sample_points_grid(eqn, h_in, h_bd)
 # X_domain, X_boundary = sample_points_rdm(eqn, 900, 124)
 N_domain = size(X_domain,2)
@@ -302,10 +302,10 @@ nugget = 1e-14
 @printf "[nugget] nugget term %e\n" nugget
 
 GNsteps_approximate = 3
-@printf "[total GN steps] %d\n" GNsteps
+@printf "[total GN steps] %d\n" GNsteps_approximate
 
 ρ_big = 3.0
-ρ_small = 2.0
+ρ_small = 3.0
 
 # ρ_big = 5.0
 # ρ_small = 5.0
@@ -314,7 +314,6 @@ k_neighbors = 2
 
 sol_init = randn(N_domain) # initial solution
 truth = [fun_u(X_domain[:,i]) for i in 1:N_domain]
-
 # @profview 
 @time sol = iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
 pts_accuracy = sqrt(sum((truth-sol).^2)/N_domain)
