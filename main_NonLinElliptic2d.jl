@@ -275,8 +275,8 @@ function parse_commandline()
 end
 
 function main(args)
-    α = args["alpha"];
-    m = args["m"];
+    α = args.alpha::Float64;
+    m = args.m::Int;
     Ω = [[0,1] [0,1]]
     # ground truth solution
     freq = 20
@@ -309,7 +309,7 @@ function main(args)
     @info "[equation] -Δu + $α u^$m = f"
     eqn = NonlinElliptic2d(α,m,Ω,fun_bdy,fun_rhs)
     
-    h_in = args["h"]; h_bd = h_in
+    h_in = args.h::Float64; h_bd = h_in
     X_domain, X_boundary = sample_points_grid(eqn, h_in, h_bd)
     # X_domain, X_boundary = sample_points_rdm(eqn, 900, 124)
     N_domain = size(X_domain,2)
@@ -317,29 +317,29 @@ function main(args)
     @info "[sample points] grid size $h_in"
     @info "[sample points] N_domain is $N_domain, N_boundary is $N_boundary"  
 
-    lengthscale = args["sigma"]
-    if args["kernel"] == "Matern5half"
+    lengthscale = args.sigma
+    if args.kernel == "Matern5half"
         cov = KoLesky.MaternCovariance5_2(lengthscale)
-    elseif args["kernel"] == "Matern7half"
+    elseif args.kernel == "Matern7half"
         cov = KoLesky.MaternCovariance7_2(lengthscale)
-    elseif args["kernel"] == "Matern9half"
+    elseif args.kernel == "Matern9half"
         cov = KoLesky.MaternCovariance9_2(lengthscale)
-    elseif args["kernel"] == "Matern11half"
+    elseif args.kernel == "Matern11half"
         cov = KoLesky.MaternCovariance11_2(lengthscale)
-    elseif args["kernel"] == "Gaussian"
+    elseif args.kernel == "Gaussian"
         cov = KoLesky.GaussianCovariance(lengthscale)
     end
-    @info "[kernel] choose $(args["kernel"]), lengthscale $lengthscale\n"  
+    @info "[kernel] choose $(args.kernel), lengthscale $lengthscale\n"  
 
-    nugget = args["nugget"]
+    nugget = args.nugget::Float64
     @info "[nugget] $nugget" 
 
-    GNsteps_approximate = args["GNsteps"]
+    GNsteps_approximate = args.GNsteps::Int
     @info "[total GN steps] $GNsteps_approximate" 
 
-    ρ_big = args["rho_big"]
-    ρ_small = args["rho_small"]
-    k_neighbors = args["k_neighbors"]
+    ρ_big = args.rho_big::Float64
+    ρ_small = args.rho_small::Float64
+    k_neighbors = args.k_neighbors::Int
     @info "[Fast Cholesky] ρ_big = $ρ_big, ρ_small = $ρ_small, k_neighbors = $k_neighbors"
 
     sol_init = randn(N_domain) # initial solution
@@ -353,7 +353,7 @@ function main(args)
     pts_max_accuracy = maximum(abs.(truth-sol))
     @info "[Linf accuracy: pCG method] $pts_max_accuracy"
 
-    if args["compare_exact"]
+    if args.compare_exact
         GNsteps_exact = 2
         @info "[comparison: exact method]"
         @time sol_exact = iterGPR_exact(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_exact)
@@ -365,4 +365,5 @@ function main(args)
 end
 
 args = parse_commandline()
+args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
 main(args)
