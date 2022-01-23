@@ -255,7 +255,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.02
+            default = 0.01
         "--nugget"
             arg_type = Float64
             default = 1e-14
@@ -264,7 +264,7 @@ function parse_commandline()
             default = 3
         "--rho_big"
             arg_type = Float64
-            default = 1.5
+            default = 2.0
         "--rho_small"
             arg_type = Float64
             default = 2.0
@@ -370,4 +370,4 @@ end
 
 args = parse_commandline()
 args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
-@profile main(args)
+main(args)
