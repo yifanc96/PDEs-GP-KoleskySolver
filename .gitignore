@@ -24,3 +24,4 @@ docs/site/
 # Manifest.toml
 
 *profile*
+*.DS_Store*
