@@ -186,6 +186,7 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
 
     Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, L_bigΘ,zeros(N_domain),N_boundary,N_domain)
 
+    implicit_factor = nothing
     for step in 1:GNsteps
         
         @info "[Current GN step] $step"
@@ -198,8 +199,11 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
         measurements[1] = meas_δ; measurements[2] = meas_Δδ
 
         @info "[Theta Train: implicit factorization] time"
-        @time implicit_factor = KoLesky.ImplicitKLFactorization(cov, measurements, ρ_small, k_neighbors; lambda = lambda, alpha = alpha)
-
+        @time if implicit_factor === nothing
+            implicit_factor = KoLesky.ImplicitKLFactorization(cov, measurements, ρ_small, k_neighbors; lambda = lambda, alpha = alpha)
+        else
+            implicit_factor.supernodes.measurements .= reduce(vcat, collect.(measurements))[implicit_factor.P]
+        end
         @info "[Theta Train: explicit factorization] time"
         @time explicit_factor = KoLesky.ExplicitKLFactorization(implicit_factor; nugget = nugget)
 
@@ -211,20 +215,18 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
         # use the approximate solution as the initial point for the pCG iteration
         sol = U*(L*rhs_now[P])
         sol[P] = sol
+
         # pcg step for Theta_train\rhs
-
         Θtrain.δ_coefs .= δ_coefs_int
-
         precond = precond_Theta_train(P,U,L)
+        
         @info "[pcg started]"
         @time sol, ch = cg!(sol, Θtrain, rhs_now; Pl = precond, log=true)
-
         @info "[pcg finished], $ch"
         
         # get approximated sol_now = Theta_test * sol
         temp = vcat(sol[1:N_boundary], δ_coefs_int .* sol[N_boundary+1:end], sol[N_boundary+1:end])
-        temp = L_bigΘ\(U_bigΘ\temp[P_bigΘ]) 
-        temp[P_bigΘ] = temp
+        temp[P_bigΘ] = L_bigΘ\(U_bigΘ\temp[P_bigΘ]) 
         @views sol_now = temp[N_boundary+1:N_domain+N_boundary] 
     end
     @info "[solver finished]"
@@ -253,7 +255,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.01
+            default = 0.02
         "--nugget"
             arg_type = Float64
             default = 1e-14
@@ -262,10 +264,10 @@ function parse_commandline()
             default = 3
         "--rho_big"
             arg_type = Float64
-            default = 3.0
+            default = 1.5
         "--rho_small"
             arg_type = Float64
-            default = 3.0
+            default = 2.0
         "--k_neighbors"
             arg_type = Int
             default = 2
