@@ -66,9 +66,9 @@ version = "0.8.4"
 
 [[FlameGraphs]]
 deps = ["AbstractTrees", "Colors", "FileIO", "FixedPointNumbers", "IndirectArrays", "LeftChildRightSiblingTrees", "Profile"]
-git-tree-sha1 = "01c053d887dc6a530a3f1e90b22fc552aae178f2"
+git-tree-sha1 = "d9eee53657f6a13ee51120337f98684c9c702264"
 uuid = "08572546-2f56-4bcf-ba4e-bab62c3a3f89"
-version = "0.2.9"
+version = "0.2.10"
 
 [[IndirectArrays]]
 git-tree-sha1 = "012e604e1c7458645cb8b436f8fba789a51b257f"
@@ -111,7 +111,7 @@ version = "0.21.2"
 
 [[KoLesky]]
 deps = ["Distances", "IntelVectorMath", "LinearAlgebra", "NearestNeighbors", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "5097c71077b6d3c33b5ca2609f54848862efabbe"
+git-tree-sha1 = "c6cab44ac6c4ca46dedc195c0fd660234fb784b8"
 repo-rev = "rewrite"
 repo-url = "https://github.com/f-t-s/KoLesky.jl.git"
 uuid = "577153e7-3f34-4473-9d40-7cd00027a7f6"

@@ -129,11 +129,22 @@ struct approx_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     δ_coefs::Vector{Tv}
     N_boundary::Ti
     N_domain::Ti
+    cache1::Vector{Tv}
 end
+
+function approx_Theta_train(P,U,L,δ_coefs,N_boundary,N_domain)
+    return approx_Theta_train(P,U,L,δ_coefs,N_boundary,N_domain, zeros(2*N_domain+N_boundary))
+end
+
 struct precond_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     P::Vector{Ti}
     U::Tmtx
     L::Tmtx
+    cache1::Vector{Tv}
+end
+
+function precond_Theta_train(P,U,L)
+    return precond_Theta_train(P,U,L,zeros(size(P,1)))
 end
 
 function size(A::approx_Theta_train, num)
@@ -141,15 +152,21 @@ function size(A::approx_Theta_train, num)
 end
 
 function mul!(x, Θtrain::approx_Theta_train, b)
-    @views temp = vcat(b[1:Θtrain.N_boundary],Θtrain.δ_coefs.*b[Θtrain.N_boundary+1:end],b[Θtrain.N_boundary+1:end])
-    temp[Θtrain.P] = Θtrain.L\(Θtrain.U\temp[Θtrain.P])
+    @views Θtrain.cache1[1:Θtrain.N_boundary] = b[1:Θtrain.N_boundary]
+    @views Θtrain.cache1[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] .= Θtrain.δ_coefs.*b[Θtrain.N_boundary+1:end]
+    @views Θtrain.cache1[Θtrain.N_boundary+Θtrain.N_domain+1:Θtrain.N_boundary+2*Θtrain.N_domain] = b[Θtrain.N_boundary+1:end]
 
-    @views x[1:Θtrain.N_boundary] = temp[1:Θtrain.N_boundary]
-    @views x[Θtrain.N_boundary+1:end] .= Θtrain.δ_coefs.*(temp[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain]) .+ temp[Θtrain.N_boundary+Θtrain.N_domain+1:end]
+    # ldiv!(Θtrain.cache2,Θtrain.U,Θtrain.cache1[Θtrain.P])
+    # ldiv!(Θtrain.cache1,Θtrain.L,Θtrain.cache2)
+    Θtrain.cache1[Θtrain.P] = Θtrain.L\(Θtrain.U\Θtrain.cache1[Θtrain.P])
+
+    @views x[1:Θtrain.N_boundary] = Θtrain.cache1[1:Θtrain.N_boundary]
+    @views x[Θtrain.N_boundary+1:end] .= Θtrain.δ_coefs.*Θtrain.cache1[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] .+ Θtrain.cache1[Θtrain.N_boundary+Θtrain.N_domain+1:end]
 end
 
 function ldiv!(x, precond::precond_Theta_train, b)
-    x[precond.P] = precond.U*(precond.L*b[precond.P])
+    mul!(precond.cache1,precond.L,b[precond.P])
+    x[precond.P] = precond.U * precond.cache1
 end
 
 function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps; ρ_big =4.0, ρ_small=6.0, k_neighbors = 4, lambda = 1.5, alpha = 1.0)
@@ -249,7 +266,7 @@ function parse_commandline()
         "--sigma"
             help = "lengthscale"
             arg_type = Float64
-            default = 0.3
+            default = 0.2
         "--h"
             help = "grid size"
             arg_type = Float64
