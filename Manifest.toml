@@ -71,7 +71,7 @@ version = "0.21.2"
 
 [[KoLesky]]
 deps = ["Distances", "IntelVectorMath", "LinearAlgebra", "NearestNeighbors", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "c91787bc0aa397206e3a127b3c19b9d2d202487d"
+git-tree-sha1 = "b05d49ac1ef3d8ef0780db7f0baaa8d1fd1ebffe"
 repo-rev = "rewrite"
 repo-url = "https://github.com/f-t-s/KoLesky.jl.git"
 uuid = "577153e7-3f34-4473-9d40-7cd00027a7f6"

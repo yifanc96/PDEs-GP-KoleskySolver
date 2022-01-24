@@ -23,6 +23,51 @@ using Logging
 # profile
 using Profile
 
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table s begin
+        "--alpha"
+            help = "α"
+            arg_type = Float64
+            default = 1.0
+        "--m"
+            help = "m"
+            arg_type = Int
+            default = 3
+        "--kernel"
+            arg_type = String
+            default = "Matern5half"
+        "--sigma"
+            help = "lengthscale"
+            arg_type = Float64
+            default = 0.3
+        "--h"
+            help = "grid size"
+            arg_type = Float64
+            default = 0.01
+        "--nugget"
+            arg_type = Float64
+            default = 1e-14
+        "--GNsteps"
+            arg_type = Int
+            default = 3
+        "--rho_big"
+            arg_type = Float64
+            default = 2.0
+        "--rho_small"
+            arg_type = Float64
+            default = 2.0
+        "--k_neighbors"
+            arg_type = Int
+            default = 2
+        "--compare_exact"
+            arg_type = Bool
+            default =  false
+    end
+    return parse_args(s)
+end
+
 ## PDEs type
 abstract type AbstractPDEs end
 struct NonlinElliptic2d{Tα,Tm,TΩ} <: AbstractPDEs
@@ -105,6 +150,8 @@ function get_Gram_matrices(eqn::NonlinElliptic2d, cov::KoLesky.AbstractCovarianc
 end
 # iterative GPR
 function iterGPR_exact(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps)
+    N_domain = size(X_domain,2)
+    N_boundary = size(X_boundary,2)
     # get the rhs and bdy data
     rhs = [eqn.rhs(X_domain[:,i]) for i in 1:N_domain]
     bdy = [eqn.bdy(X_boundary[:,i]) for i in 1:N_boundary]
@@ -213,70 +260,26 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
         rhs_now = vcat(bdy, rhs.+eqn.α*(eqn.m-1)*sol_now.^eqn.m)
 
         # use the approximate solution as the initial point for the pCG iteration
-        sol = U*(L*rhs_now[P])
-        sol[P] = sol
+        Θinv_rhs = U*(L*rhs_now[P])
+        Θinv_rhs[P] = Θinv_rhs
 
         # pcg step for Theta_train\rhs
         Θtrain.δ_coefs .= δ_coefs_int
         precond = precond_Theta_train(P,U,L)
         
         @info "[pcg started]"
-        @time sol, ch = cg!(sol, Θtrain, rhs_now; Pl = precond, log=true)
+        @time Θinv_rhs, ch = cg!(Θinv_rhs, Θtrain, rhs_now; Pl = precond, log=true)
         @info "[pcg finished], $ch"
         
-        # get approximated sol_now = Theta_test * sol
-        temp = vcat(sol[1:N_boundary], δ_coefs_int .* sol[N_boundary+1:end], sol[N_boundary+1:end])
-        temp[P_bigΘ] = L_bigΘ\(U_bigΘ\temp[P_bigΘ]) 
-        @views sol_now = temp[N_boundary+1:N_domain+N_boundary] 
+        # get approximated sol_now = Theta_test * Θinv_rhs
+        tmp = vcat(Θinv_rhs[1:N_boundary], δ_coefs_int .* Θinv_rhs[N_boundary+1:end], Θinv_rhs[N_boundary+1:end])
+        tmp[P_bigΘ] = L_bigΘ\(U_bigΘ\tmp[P_bigΘ]) 
+        @views sol_now = tmp[N_boundary+1:N_domain+N_boundary] 
     end
     @info "[solver finished]"
     return sol_now
 end
 
-
-function parse_commandline()
-    s = ArgParseSettings()
-    @add_arg_table s begin
-        "--alpha"
-            help = "α"
-            arg_type = Float64
-            default = 1.0
-        "--m"
-            help = "m"
-            arg_type = Int
-            default = 3
-        "--kernel"
-            arg_type = String
-            default = "Matern5half"
-        "--sigma"
-            help = "lengthscale"
-            arg_type = Float64
-            default = 0.3
-        "--h"
-            help = "grid size"
-            arg_type = Float64
-            default = 0.01
-        "--nugget"
-            arg_type = Float64
-            default = 1e-14
-        "--GNsteps"
-            arg_type = Int
-            default = 3
-        "--rho_big"
-            arg_type = Float64
-            default = 2.0
-        "--rho_small"
-            arg_type = Float64
-            default = 2.0
-        "--k_neighbors"
-            arg_type = Int
-            default = 2
-        "--compare_exact"
-            arg_type = Bool
-            default = false
-    end
-    return parse_args(s)
-end
 
 function main(args)
     α = args.alpha::Float64
