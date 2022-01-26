@@ -5,7 +5,6 @@ Pkg.activate(@__DIR__)
 using StaticArrays: SVector 
 using LinearAlgebra
 using SparseArrays: SparseMatrixCSC, sparse
-
 # Fast Cholesky
 using KoLesky 
 
@@ -45,7 +44,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.01
+            default = 0.005
         "--nugget"
             arg_type = Float64
             default = 1e-14
@@ -54,13 +53,13 @@ function parse_commandline()
             default = 3
         "--rho_big"
             arg_type = Float64
-            default = 2.0
+            default = 3.0
         "--rho_small"
             arg_type = Float64
-            default = 2.0
+            default = 3.0
         "--k_neighbors"
             arg_type = Int
-            default = 2
+            default = 3
         "--compare_exact"
             arg_type = Bool
             default =  false
