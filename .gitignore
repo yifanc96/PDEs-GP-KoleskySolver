@@ -25,3 +25,5 @@ docs/site/
 
 *profile*
 *.DS_Store*
+*_order*
+*cache1*

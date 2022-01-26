@@ -107,6 +107,12 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[MKLSparse]]
+deps = ["LinearAlgebra", "MKL_jll", "SparseArrays"]
+git-tree-sha1 = "c5fd60128db7d4e0ad2358d1017d293c81a49335"
+uuid = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
+version = "1.1.0"
+
 [[MKL_jll]]
 deps = ["Artifacts", "IntelOpenMP_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
 git-tree-sha1 = "5455aef09b40e5020e1520f551fa3135040d4ed0"

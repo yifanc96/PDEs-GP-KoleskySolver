@@ -4,7 +4,7 @@ Pkg.activate(@__DIR__)
 # For linear algebra
 using StaticArrays: SVector 
 using LinearAlgebra
-using SparseArrays: SparseMatrixCSC, sparse
+using SparseArrays: SparseMatrixCSC, sparse, nnz
 
 # Fast Cholesky
 using KoLesky 
@@ -122,7 +122,7 @@ end
 ## algorithm using Kolesky and pcg
 # struct that stores the factor of Theta_train
 abstract type implicit_mtx end
-struct approx_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
+struct approx_Theta_train{Tv,Ti,Tmtx} <: implicit_mtx
     P::Vector{Ti}
     U::Tmtx
     L::Tmtx
@@ -130,10 +130,11 @@ struct approx_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     N_boundary::Ti
     N_domain::Ti
     cache1::Vector{Tv}
+    cache2::Vector{Tv}
 end
 
 function approx_Theta_train(P,U,L,δ_coefs,N_boundary,N_domain)
-    return approx_Theta_train(P,U,L,δ_coefs,N_boundary,N_domain, zeros(2*N_domain+N_boundary))
+    return approx_Theta_train(P,lu(U),lu(L),δ_coefs,N_boundary,N_domain, zeros(2*N_domain+N_boundary),zeros(2*N_domain+N_boundary))
 end
 
 struct precond_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
@@ -155,12 +156,13 @@ function mul!(x, Θtrain::approx_Theta_train, b)
     @views Θtrain.cache1[1:Θtrain.N_boundary] = b[1:Θtrain.N_boundary]
     @views Θtrain.cache1[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] .= Θtrain.δ_coefs.*b[Θtrain.N_boundary+1:end]
     @views Θtrain.cache1[Θtrain.N_boundary+Θtrain.N_domain+1:Θtrain.N_boundary+2*Θtrain.N_domain] = b[Θtrain.N_boundary+1:end]
+    scratch .= @view Θtrain.cache1[Θtrain.P]
 
-    # ldiv!(Θtrain.cache2,Θtrain.U,Θtrain.cache1[Θtrain.P])
-    # ldiv!(Θtrain.cache1,Θtrain.L,Θtrain.cache2)
-    Θtrain.cache1[Θtrain.P] = Θtrain.L\(Θtrain.U\Θtrain.cache1[Θtrain.P])
-
-    @views x[1:Θtrain.N_boundary] = Θtrain.cache1[1:Θtrain.N_boundary]
+    ldiv!(Θtrain.cache2,Θtrain.U,Θtrain.cache1[Θtrain.P])
+    ldiv!(Θtrain.cache1,Θtrain.L,Θtrain.cache2)
+    # Θtrain.cache1[Θtrain.P] = Θtrain.L\(Θtrain.U\Θtrain.cache1[Θtrain.P])
+    Θtrain.cache1[Θtrain.P] .= Θtrain.cache1
+    @views x[1:Θtrain.N_boundary] .= Θtrain.cache1[1:Θtrain.N_boundary]
     @views x[Θtrain.N_boundary+1:end] .= Θtrain.δ_coefs.*Θtrain.cache1[Θtrain.N_boundary+1:Θtrain.N_boundary+Θtrain.N_domain] .+ Θtrain.cache1[Θtrain.N_boundary+Θtrain.N_domain+1:end]
 end
 
@@ -200,7 +202,10 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
     U_bigΘ = explicit_bigΘ.U
     L_bigΘ = sparse(U_bigΘ')
     P_bigΘ = explicit_bigΘ.P
-
+    println(nnz(L_bigΘ))
+    println(nnz(lu(L_bigΘ).L))
+    println(nnz(lu(L_bigΘ).U))
+    @time lu(L_bigΘ)
     Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, L_bigΘ,zeros(N_domain),N_boundary,N_domain)
 
     for step in 1:GNsteps
