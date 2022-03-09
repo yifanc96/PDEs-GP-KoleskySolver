@@ -23,32 +23,28 @@ using Logging
 using Profile
 using BenchmarkTools
 
+# solving Burgers: u_t+ u u_x- nu u_xx=0
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table s begin
-        "--alpha"
-            help = "α"
-            arg_type = Float64
-            default = 1.0
-        "--m"
+        "--nu"
             help = "m"
             arg_type = Int
             default = 3
         "--kernel"
             arg_type = String
             default = "Matern7half"
-            # default = "Gaussian"
         "--sigma"
             help = "lengthscale"
             arg_type = Float64
-            default = 0.3
+            default = 0.01
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.01
+            default = 0.02
         "--nugget"
             arg_type = Float64
-            default = 1e-8
+            default = 1e-10
         "--GNsteps"
             arg_type = Int
             default = 3
@@ -75,6 +71,8 @@ struct NonlinElliptic2d{Tα,Tm,TΩ} <: AbstractPDEs
     α::Tα
     m::Tm
     Ω::TΩ
+    a::Function
+    ∇a::Function
     bdy::Function
     rhs::Function
 end
@@ -128,23 +126,24 @@ function get_Gram_matrices(eqn::NonlinElliptic2d, cov::KoLesky.AbstractCovarianc
     d = 2
     N_domain = size(X_domain,2)
     N_boundary = size(X_boundary,2)
-    Δδ_coefs = -1.0
+    Δδ_coefs = [-eqn.a(X_domain[:,i]) for i in 1:N_domain]
+    ∇δ_coefs = [-eqn.∇a(X_domain[:,i]) for i in 1:N_domain]
     δ_coefs_int = eqn.α*eqn.m*(sol_now.^(eqn.m-1)) 
 
     # get linearized PDEs correponding measurements
     meas_δ = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_boundary[:,i])) for i = 1:N_boundary]
-    meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs_int[i]) for i = 1:N_domain]
+    meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs_int[i]) for i = 1:N_domain]
     meas_test_int = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_domain[:,i])) for i = 1:N_domain]
 
     Theta_train = zeros(N_domain+N_boundary,N_domain+N_boundary)
 
     measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,2)
-    measurements[1] = meas_δ; measurements[2] = meas_Δδ
+    measurements[1] = meas_δ; measurements[2] = meas_Δ∇δ
     cov(Theta_train, reduce(vcat,measurements))
     
     Theta_test = zeros(N_domain,N_domain+N_boundary)
     cov(view(Theta_test,1:N_domain,1:N_boundary), meas_test_int, meas_δ)
-    cov(view(Theta_test,1:N_domain,N_boundary+1:N_domain+N_boundary), meas_test_int, meas_Δδ)
+    cov(view(Theta_test,1:N_domain,N_boundary+1:N_domain+N_boundary), meas_test_int, meas_Δ∇δ)
     return Theta_train, Theta_test
 
 end
@@ -213,19 +212,20 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
 
     # form the fast Cholesky part that can be used to compute mtx-vct mul for Theta_test
     d = 2
-    Δδ_coefs = -1.0
+    Δδ_coefs = [-eqn.a(X_domain[:,i]) for i in 1:N_domain]
+    ∇δ_coefs = [-eqn.∇a(X_domain[:,i]) for i in 1:N_domain]
     δ_coefs = 0.0
     meas_δ = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_boundary[:,i])) for i = 1:N_boundary]
     meas_δ_int = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_domain[:,i])) for i = 1:N_domain]
-    meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs) for i = 1:N_domain]
+    meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs) for i = 1:N_domain]
+
+
     measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,3)
     measurements[1] = meas_δ; measurements[2] = meas_δ_int
-    measurements[3] = meas_Δδ
+    measurements[3] = meas_Δ∇δ
 
     @info "[Big Theta: implicit factorization] time"
     @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_FollowDiracs(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
-    # @time implicit_bigΘ = KoLesky.ImplicitKLFactorization(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
-    # @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_DiracsFirstThenUnifScale(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
 
     @info "[Big Theta: explicit factorization] time"
     @time explicit_bigΘ = KoLesky.ExplicitKLFactorization(implicit_bigΘ; nugget = nugget)
@@ -236,16 +236,17 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
     Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, L_bigΘ,zeros(N_domain),N_boundary,N_domain)
 
     implicit_factor = nothing
+
+
     for step in 1:GNsteps
         
         @info "[Current GN step] $step"
         # get Cholesky of Theta_train
-        Δδ_coefs = -1.0
         δ_coefs_int = eqn.α*eqn.m*sol_now.^(eqn.m-1)
 
-        meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs_int[i]) for i = 1:N_domain]
+        meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs_int[i]) for i = 1:N_domain]
         measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,2)
-        measurements[1] = meas_δ; measurements[2] = meas_Δδ
+        measurements[1] = meas_δ; measurements[2] = meas_Δ∇δ
 
         @info "[Theta Train: implicit factorization] time"
         @time if implicit_factor === nothing
@@ -288,8 +289,8 @@ function main(args)
     m = args.m::Int
     Ω = [[0,1] [0,1]]
     # ground truth solution
-    freq = 600
-    s = 4
+    freq = 100
+    s = 3
     function fun_u(x)
         ans = 0
         @inbounds for k = 1:freq
@@ -299,13 +300,26 @@ function main(args)
         return ans
     end
 
+    function fun_a(x)
+        k = 5
+        return exp(sin(k*pi*x[1]*x[2]))
+    end
+
+    function grad_a(x)
+        return ForwardDiff.gradient(fun_a, x)
+    end
+
+    function grad_u(x)
+        return ForwardDiff.gradient(fun_u, x)
+    end
+
     # right hand side
     function fun_rhs(x)
         ans = 0
         @inbounds for k = 1:freq
             ans += (2*k^2*pi^2)*sin(pi*k*x[1])*sin(pi*k*x[2])/k^s 
         end
-        return ans + α*fun_u(x)^m
+        return -sum(grad_a(x).*grad_u(x)) + fun_a(x)*ans + α*fun_u(x)^m
     end
 
     # boundary value
@@ -314,12 +328,12 @@ function main(args)
     end
 
     @info "[solver started] NonlinElliptic2d"
-    @info "[equation] -Δu + $α u^$m = f"
-    eqn = NonlinElliptic2d(α,m,Ω,fun_bdy,fun_rhs)
+    @info "[equation] - ∇⋅(a∇u) + $α u^$m = f"
+    eqn = NonlinElliptic2d(α,m,Ω,fun_a,grad_a,fun_bdy,fun_rhs)
     
     h_in = args.h::Float64; h_bd = h_in
     X_domain, X_boundary = sample_points_grid(eqn, h_in, h_bd)
-    # X_domain, X_boundary = sample_points_rdm(eqn, 10000, 400)
+    # X_domain, X_boundary = sample_points_rdm(eqn, 900, 124)
     N_domain = size(X_domain,2)
     N_boundary = size(X_boundary,2)
     @info "[sample points] grid size $h_in"
@@ -350,7 +364,7 @@ function main(args)
     k_neighbors = args.k_neighbors::Int
     @info "[Fast Cholesky] ρ_big = $ρ_big, ρ_small = $ρ_small, k_neighbors = $k_neighbors"
 
-    sol_init = zeros(N_domain) # initial solution
+    sol_init = randn(N_domain) # initial solution
     truth = [fun_u(X_domain[:,i]) for i in 1:N_domain]
 
 
