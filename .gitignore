@@ -27,3 +27,6 @@ docs/site/
 *.DS_Store*
 *_order*
 *cache1*
+
+old/*
+*.ipynb*
