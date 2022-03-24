@@ -248,6 +248,7 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
 
     # update the initial sol
 
+    # Θinv_rhs = zeros(N_boundary+N_domain)
 
     for step in 1:GNsteps
         
