@@ -20,8 +20,10 @@ using ArgParse
 using Logging
 
 # profile
-using Profile
-using BenchmarkTools
+# using Profile
+# using BenchmarkTools
+
+using JLD
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -45,10 +47,10 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.01
+            default = 0.02
         "--nugget"
             arg_type = Float64
-            default = 1e-8
+            default = 1e-10
         "--GNsteps"
             arg_type = Int
             default = 3
@@ -354,8 +356,11 @@ function main(args)
     truth = [fun_u(X_domain[:,i]) for i in 1:N_domain]
 
 
-    fast_solve() = @time iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
+    fast_solve() = iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
     sol = fast_solve()
+
+    # time the second time, to avoid compilation time count
+    time = @elapsed fast_solve()
 
     pts_accuracy = sqrt(sum((truth-sol).^2)/N_domain)
     @info "[L2 accuracy: pCG method] $pts_accuracy"
@@ -374,9 +379,41 @@ function main(args)
         @info "[Linf accuracy: exact method] $pts_max_accuracy_exact"
     end
 
-    
+    return time, pts_accuracy, pts_max_accuracy
 end
 
 args = parse_commandline()
-args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
-main(args)
+# args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
+# main(args)
+arr_kernel = ["Matern5half", "Matern7half"]
+# arr_kernel = ["Matern5half", "Matern7half", "Matern9half"]
+arr_h = [0.02,0.01]
+# arr_h = [0.02,0.01,0.005,0.0025]
+arr_ρ = [2.0, 3.0]
+
+result = Dict()
+for kernel in arr_kernel
+    result[("kernel",kernel)] = Dict()
+    args["kernel"] = kernel
+    for h in arr_h
+        args["h"] = h
+        result[("kernel",kernel)][("h",h)] = Dict()
+
+        for ρ in arr_ρ
+            result[("kernel",kernel)][("h",h)][("rho",ρ)] = Dict()
+            args["rho_big"] = ρ
+            args["rho_small"] = ρ
+            args_now = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
+
+            @info "-------------------------------"
+            time, pts_accuracy, pts_max_accuracy = main(args_now)
+            @info "-------------------------------"
+            result[("kernel",kernel)][("h",h)][("rho",ρ)]["time"] = time
+            result[("kernel",kernel)][("h",h)][("rho",ρ)]["L2"] = pts_accuracy
+            result[("kernel",kernel)][("h",h)][("rho",ρ)]["Linf"] = pts_max_accuracy
+        end
+    end
+end
+
+save("NonlinElliptic2d_data.jld", "result", result)
+# save results
