@@ -22,10 +22,6 @@ using ArgParse
 # logging
 using Logging
 
-# profile
-using Profile
-using BenchmarkTools
-
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table s begin
@@ -47,7 +43,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.01
+            default = 0.02
         "--nugget"
             arg_type = Float64
             default = 1e-15
@@ -66,7 +62,7 @@ function parse_commandline()
             default = 3
         "--compare_exact"
             arg_type = Bool
-            default = false
+            default = true
     end
     return parse_args(s)
 end

@@ -1,5 +1,5 @@
-using Pkg
-Pkg.activate(@__DIR__)
+# using Pkg
+# Pkg.activate(@__DIR__)
 
 # For linear algebra
 using StaticArrays: SVector 
@@ -13,29 +13,25 @@ import IterativeSolvers: cg!
 import LinearAlgebra: mul!, ldiv!
 import Base: size
 
+# autoDiff
+using ForwardDiff
+
 # parser
 using ArgParse
 
 # logging
 using Logging
 
-using JLD
+# profile
+# using Profile
+# using BenchmarkTools
 
 function parse_commandline()
     s = ArgParseSettings()
     @add_arg_table s begin
-        "--alpha"
-            help = "α"
-            arg_type = Float64
-            default = 1.0
-        "--m"
-            help = "m"
-            arg_type = Int
-            default = 3
         "--kernel"
             arg_type = String
             default = "Matern7half"
-            # default = "Gaussian"
         "--sigma"
             help = "lengthscale"
             arg_type = Float64
@@ -46,7 +42,7 @@ function parse_commandline()
             default = 0.02
         "--nugget"
             arg_type = Float64
-            default = 1e-10
+            default = 1e-15
         "--GNsteps"
             arg_type = Int
             default = 3
@@ -55,30 +51,29 @@ function parse_commandline()
             default = 3.0
         "--rho_small"
             arg_type = Float64
+            # default = -log(5*h_grid)
             default = 3.0
         "--k_neighbors"
             arg_type = Int
             default = 3
         "--compare_exact"
             arg_type = Bool
-            default = false
+            default = true
     end
     return parse_args(s)
 end
 
 ## PDEs type
 abstract type AbstractPDEs end
-struct NonlinElliptic2d{Tα,Tm,TΩ} <: AbstractPDEs
-    # eqn: -Δu + α*u^m = f in [Ω[1,1],Ω[2,1]]*[Ω[1,2],Ω[2,2]]
-    α::Tα
-    m::Tm
+struct MinimalSurface2d{TΩ} <: AbstractPDEs
+    # minimal surface equation in [Ω[1,1],Ω[2,1]]*[Ω[1,2],Ω[2,2]]
     Ω::TΩ
     bdy::Function
     rhs::Function
 end
 
 ## sample points
-function sample_points_rdm(eqn::NonlinElliptic2d, N_domain, N_boundary)
+function sample_points_rdm(eqn::MinimalSurface2d, N_domain, N_boundary)
     Ω = eqn.Ω
     x1l = Ω[1,1]
     x1r = Ω[2,1]
@@ -105,7 +100,7 @@ function sample_points_rdm(eqn::NonlinElliptic2d, N_domain, N_boundary)
     X_boundary[3*N_bd_each+1:N_boundary, :] = hcat(x1l*ones(N_bd_each), (x2r-x2l)*rand(Float64,(N_bd_each,1)).+x2l)
     return X_domain', X_boundary'
 end
-function sample_points_grid(eqn::NonlinElliptic2d, h_in, h_bd)
+function sample_points_grid(eqn::MinimalSurface2, h_in, h_bd)
     Ω = eqn.Ω
     x1l = Ω[1,1]
     x1r = Ω[2,1]
@@ -122,27 +117,28 @@ end
 
 ## exact algorithms
 # assemby Gram matrices
-function get_Gram_matrices(eqn::NonlinElliptic2d, cov::KoLesky.AbstractCovarianceFunction, X_domain, X_boundary, sol_now)
+function get_Gram_matrices(eqn::MinimalSurface2, cov::KoLesky.AbstractCovarianceFunction, X_domain, X_boundary, sol_now)
     d = 2
     N_domain = size(X_domain,2)
     N_boundary = size(X_boundary,2)
-    Δδ_coefs = -1.0
+    Δδ_coefs = [-eqn.a(X_domain[:,i]) for i in 1:N_domain]
+    ∇δ_coefs = [-eqn.∇a(X_domain[:,i]) for i in 1:N_domain]
     δ_coefs_int = eqn.α*eqn.m*(sol_now.^(eqn.m-1)) 
 
     # get linearized PDEs correponding measurements
     meas_δ = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_boundary[:,i])) for i = 1:N_boundary]
-    meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs_int[i]) for i = 1:N_domain]
+    meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs_int[i]) for i = 1:N_domain]
     meas_test_int = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_domain[:,i])) for i = 1:N_domain]
 
     Theta_train = zeros(N_domain+N_boundary,N_domain+N_boundary)
 
     measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,2)
-    measurements[1] = meas_δ; measurements[2] = meas_Δδ
+    measurements[1] = meas_δ; measurements[2] = meas_Δ∇δ
     cov(Theta_train, reduce(vcat,measurements))
     
     Theta_test = zeros(N_domain,N_domain+N_boundary)
     cov(view(Theta_test,1:N_domain,1:N_boundary), meas_test_int, meas_δ)
-    cov(view(Theta_test,1:N_domain,N_boundary+1:N_domain+N_boundary), meas_test_int, meas_Δδ)
+    cov(view(Theta_test,1:N_domain,N_boundary+1:N_domain+N_boundary), meas_test_int, meas_Δ∇δ)
     return Theta_train, Theta_test
 
 end
@@ -211,19 +207,22 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
 
     # form the fast Cholesky part that can be used to compute mtx-vct mul for Theta_test
     d = 2
-    Δδ_coefs = -1.0
+    Δδ_coefs = [-eqn.a(X_domain[:,i]) for i in 1:N_domain]
+    ∇δ_coefs = [-eqn.∇a(X_domain[:,i]) for i in 1:N_domain]
     δ_coefs = 0.0
     meas_δ = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_boundary[:,i])) for i = 1:N_boundary]
     meas_δ_int = [KoLesky.PointMeasurement{d}(SVector{d,Float64}(X_domain[:,i])) for i = 1:N_domain]
-    meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs) for i = 1:N_domain]
+    meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs) for i = 1:N_domain]
+
+
     measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,3)
     measurements[1] = meas_δ; measurements[2] = meas_δ_int
-    measurements[3] = meas_Δδ
+    measurements[3] = meas_Δ∇δ
 
     @info "[Big Theta: implicit factorization] time"
-    @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_FollowDiracs(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
+    # @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_FollowDiracs(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
     # @time implicit_bigΘ = KoLesky.ImplicitKLFactorization(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
-    # @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_DiracsFirstThenUnifScale(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
+    @time implicit_bigΘ = KoLesky.ImplicitKLFactorization_DiracsFirstThenUnifScale(cov, measurements, ρ_big, k_neighbors; lambda = lambda, alpha = alpha)
 
     @info "[Big Theta: explicit factorization] time"
     @time explicit_bigΘ = KoLesky.ExplicitKLFactorization(implicit_bigΘ; nugget = nugget)
@@ -234,16 +233,21 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNst
     Θtrain = approx_Theta_train(P_bigΘ, U_bigΘ, L_bigΘ,zeros(N_domain),N_boundary,N_domain)
 
     implicit_factor = nothing
+
+    # update the initial sol
+
+    # Θinv_rhs = zeros(N_boundary+N_domain)
+
     for step in 1:GNsteps
         
         @info "[Current GN step] $step"
         # get Cholesky of Theta_train
-        Δδ_coefs = -1.0
         δ_coefs_int = eqn.α*eqn.m*sol_now.^(eqn.m-1)
 
-        meas_Δδ = [KoLesky.ΔδPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs, δ_coefs_int[i]) for i = 1:N_domain]
+
+        meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}(X_domain[:,i]), Δδ_coefs[i], ∇δ_coefs[i], δ_coefs_int[i]) for i = 1:N_domain]
         measurements = Vector{Vector{<:KoLesky.AbstractPointMeasurement}}(undef,2)
-        measurements[1] = meas_δ; measurements[2] = meas_Δδ
+        measurements[1] = meas_δ; measurements[2] = meas_Δ∇δ
 
         @info "[Theta Train: implicit factorization] time"
         @time if implicit_factor === nothing
@@ -286,8 +290,8 @@ function main(args)
     m = args.m::Int
     Ω = [[0,1] [0,1]]
     # ground truth solution
-    freq = 600
-    s = 3.5
+    freq = 100
+    s = 3
     function fun_u(x)
         ans = 0
         @inbounds for k = 1:freq
@@ -297,13 +301,26 @@ function main(args)
         return ans
     end
 
+    function fun_a(x)
+        k = 5
+        return exp(sin(k*pi*x[1]*x[2]))
+    end
+
+    function grad_a(x)
+        return ForwardDiff.gradient(fun_a, x)
+    end
+
+    function grad_u(x)
+        return ForwardDiff.gradient(fun_u, x)
+    end
+
     # right hand side
     function fun_rhs(x)
         ans = 0
         @inbounds for k = 1:freq
             ans += (2*k^2*pi^2)*sin(pi*k*x[1])*sin(pi*k*x[2])/k^s 
         end
-        return ans + α*fun_u(x)^m
+        return -sum(grad_a(x).*grad_u(x)) + fun_a(x)*ans + α*fun_u(x)^m
     end
 
     # boundary value
@@ -312,12 +329,12 @@ function main(args)
     end
 
     @info "[solver started] NonlinElliptic2d"
-    @info "[equation] -Δu + $α u^$m = f"
-    eqn = NonlinElliptic2d(α,m,Ω,fun_bdy,fun_rhs)
+    @info "[equation] - ∇⋅(a∇u) + $α u^$m = f"
+    eqn = NonlinElliptic2d(α,m,Ω,fun_a,grad_a,fun_bdy,fun_rhs)
     
     h_in = args.h::Float64; h_bd = h_in
     X_domain, X_boundary = sample_points_grid(eqn, h_in, h_bd)
-    # X_domain, X_boundary = sample_points_rdm(eqn, 10000, 400)
+    # X_domain, X_boundary = sample_points_rdm(eqn, 900, 124)
     N_domain = size(X_domain,2)
     N_boundary = size(X_boundary,2)
     @info "[sample points] grid size $h_in"
@@ -349,14 +366,12 @@ function main(args)
     @info "[Fast Cholesky] ρ_big = $ρ_big, ρ_small = $ρ_small, k_neighbors = $k_neighbors"
 
     sol_init = zeros(N_domain) # initial solution
+
     truth = [fun_u(X_domain[:,i]) for i in 1:N_domain]
 
 
-    fast_solve() = iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
+    fast_solve() = @time iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, sol_init, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
     sol = fast_solve()
-
-    # time the second time, to avoid compilation time count
-    time = @elapsed fast_solve()
 
     pts_accuracy = sqrt(sum((truth-sol).^2)/N_domain)
     @info "[L2 accuracy: pCG method] $pts_accuracy"
@@ -375,41 +390,9 @@ function main(args)
         @info "[Linf accuracy: exact method] $pts_max_accuracy_exact"
     end
 
-    return time, pts_accuracy, pts_max_accuracy
+    
 end
 
 args = parse_commandline()
-# args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
-# main(args)
-arr_kernel = ["Matern5half"]
-# arr_kernel = ["Matern5half", "Matern7half", "Matern9half"]
-# arr_h = [0.02,0.01]
-arr_h = [0.02,0.01,0.005,0.0025]
-arr_ρ = [2.0, 3.0, 4.0]
-
-result = Dict()
-for kernel in arr_kernel
-    result[("kernel",kernel)] = Dict()
-    args["kernel"] = kernel
-    for h in arr_h
-        args["h"] = h
-        result[("kernel",kernel)][("h",h)] = Dict()
-
-        for ρ in arr_ρ
-            result[("kernel",kernel)][("h",h)][("rho",ρ)] = Dict()
-            args["rho_big"] = ρ
-            args["rho_small"] = ρ
-            args_now = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
-
-            @info "-------------------------------"
-            time, pts_accuracy, pts_max_accuracy = main(args_now)
-            @info "-------------------------------"
-            result[("kernel",kernel)][("h",h)][("rho",ρ)]["time"] = time
-            result[("kernel",kernel)][("h",h)][("rho",ρ)]["L2"] = pts_accuracy
-            result[("kernel",kernel)][("h",h)][("rho",ρ)]["Linf"] = pts_max_accuracy
-        end
-    end
-end
-
-save("NonlinElliptic2d_data.jld", "result", result)
-# save results
+args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
+main(args)
