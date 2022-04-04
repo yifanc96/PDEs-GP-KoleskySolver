@@ -167,9 +167,9 @@ version = "2.2.3+0"
 
 [[Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "ae13fcbc7ab8f16b0856729b050ef0c446aa3492"
+git-tree-sha1 = "bad72f730e9e91c08d9427d5e8db95478a3c323d"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
-version = "2.4.4+0"
+version = "2.4.8+0"
 
 [[FFMPEG]]
 deps = ["FFMPEG_jll"]
@@ -182,6 +182,12 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "d8a578692e3077ac998b50c0217dfd67f21d1e5f"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.0+0"
+
+[[FastGaussQuadrature]]
+deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
+git-tree-sha1 = "58d83dd5a78a36205bdfddb82b1bb67682e64487"
+uuid = "442a2c76-b920-505d-bb47-c5924d526838"
+version = "0.4.9"
 
 [[FileIO]]
 deps = ["Pkg", "Requires", "UUIDs"]
@@ -233,15 +239,15 @@ version = "3.3.6+0"
 
 [[GR]]
 deps = ["Base64", "DelimitedFiles", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Printf", "Random", "RelocatableFolders", "Serialization", "Sockets", "Test", "UUIDs"]
-git-tree-sha1 = "9f836fb62492f4b0f0d3b06f55983f2704ed0883"
+git-tree-sha1 = "af237c08bda486b74318c8070adb96efa6952530"
 uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
-version = "0.64.0"
+version = "0.64.2"
 
 [[GR_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "a6c850d77ad5118ad3be4bd188919ce97fffac47"
+git-tree-sha1 = "cd6efcf9dc746b06709df14e462f0a3fe0786b1e"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.64.0+0"
+version = "0.64.2+0"
 
 [[GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
@@ -375,8 +381,8 @@ uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
 version = "2.1.2+0"
 
 [[KoLesky]]
-deps = ["Distances", "IntelVectorMath", "LinearAlgebra", "NearestNeighbors", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "6ad77d2dd99d179a1600e3b8e93ae317b13f6d43"
+deps = ["Distances", "ForwardDiff", "IntelVectorMath", "LinearAlgebra", "NearestNeighbors", "SparseArrays", "StaticArrays"]
+git-tree-sha1 = "a4006e703a4a4a55b738c5e87bbfc0c528fc678d"
 repo-rev = "rewrite"
 repo-url = "https://github.com/f-t-s/KoLesky.jl.git"
 uuid = "577153e7-3f34-4473-9d40-7cd00027a7f6"
@@ -407,9 +413,9 @@ version = "1.3.0"
 
 [[Latexify]]
 deps = ["Formatting", "InteractiveUtils", "LaTeXStrings", "MacroTools", "Markdown", "Printf", "Requires"]
-git-tree-sha1 = "4f00cc36fede3c04b8acf9b2e2763decfdcecfa6"
+git-tree-sha1 = "6f14549f7760d84b2db7a9b10b88cd3cc3025730"
 uuid = "23fbe1c1-3f47-55db-b15f-69d7ec21a316"
-version = "0.15.13"
+version = "0.15.14"
 
 [[LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
@@ -599,9 +605,9 @@ version = "8.44.0+0"
 
 [[Parsers]]
 deps = ["Dates"]
-git-tree-sha1 = "85b5da0fa43588c75bb1ff986493443f821c70b7"
+git-tree-sha1 = "621f4f3b4977325b9128d5fae7a8b4829a0c2222"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.2.3"
+version = "2.2.4"
 
 [[Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
