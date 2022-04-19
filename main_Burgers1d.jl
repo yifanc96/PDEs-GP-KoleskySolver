@@ -40,15 +40,15 @@ function parse_commandline()
         "--sigma"
             help = "lengthscale"
             arg_type = Float64
-            default = 0.03
+            default = 0.02
         "--h"
             help = "spatial grid size"
             arg_type = Float64
-            default = 0.004
+            default = 0.001
         "--dt"
             help = "time step size"
             arg_type = Float64
-            default = 0.04
+            default = 0.01
         "--T"
             help = "final time"
             arg_type = Float64
@@ -58,7 +58,7 @@ function parse_commandline()
             default = 1e-10
         "--GNsteps"
             arg_type = Int
-            default = 1
+            default = 2
         "--rho_big"
             arg_type = Float64
             default = 3.0
@@ -67,7 +67,7 @@ function parse_commandline()
             default = 3.0
         "--k_neighbors"
             arg_type = Int
-            default = 3
+            default = 1
         "--compare_exact"
             arg_type = Bool
             default = false
@@ -201,7 +201,7 @@ struct approx_Theta_train{Tv,Ti,Tmtx<:SparseMatrixCSC{Tv,Ti}} <: implicit_mtx
     L::Tmtx
     δ_coefs::Vector{Tv}
     ∇δ_coefs::Vector{Tv}
-    Δ_coef::Tv
+    Δδ_coef::Tv
     N_boundary::Ti
     N_domain::Ti
 end
@@ -216,7 +216,7 @@ function size(A::approx_Theta_train, num)
 end
 
 function mul!(x, Θtrain::approx_Theta_train, b)
-    @views temp = vcat(b[1:Θtrain.N_boundary],Θtrain.δ_coefs.*b[Θtrain.N_boundary+1:end],Θtrain.∇δ_coefs.*b[Θtrain.N_boundary+1:end],Θtrain.Δ_coef*b[Θtrain.N_boundary+1:end])
+    @views temp = vcat(b[1:Θtrain.N_boundary],Θtrain.δ_coefs.*b[Θtrain.N_boundary+1:end],Θtrain.∇δ_coefs.*b[Θtrain.N_boundary+1:end],Θtrain.Δδ_coef*b[Θtrain.N_boundary+1:end])
     temp[Θtrain.P] = Θtrain.L\(Θtrain.U\temp[Θtrain.P])
 
     @views x[1:Θtrain.N_boundary] = temp[1:Θtrain.N_boundary]
@@ -289,7 +289,7 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, dt, T, nugget, GNsteps
             ∇δ_coefs = sol_u
             δ_coefs_int = 2/dt .+ sol_ux # Crank-Nikoson discretization    
             meas_Δ∇δ = [KoLesky.Δ∇δPointMeasurement{Float64,d}(SVector{d,Float64}([X_domain[i]]), Δδ_coefs, [∇δ_coefs[i]], δ_coefs_int[i]) for i = 1:N_domain]
-            measurements[2] = meas_Δ∇δ
+            measurement_train[2] = meas_Δ∇δ
 
             @info "[Theta Train: implicit factorization] time"
             @time if implicit_factor === nothing
@@ -322,8 +322,8 @@ function iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, dt, T, nugget, GNsteps
             tmp[P_bigΘ] = L_bigΘ\(U_bigΘ\tmp[P_bigΘ]) 
             
             @views sol_u = tmp[N_boundary+1:N_domain+N_boundary] 
-            @views sol_ux .= v[N_domain+N_boundary+1:2*N_domain+N_boundary]
-            @views sol_uxx .= v[2*N_domain+N_boundary+1:3*N_domain+N_boundary]
+            @views sol_ux .= tmp[N_domain+N_boundary+1:2*N_domain+N_boundary]
+            @views sol_uxx .= tmp[2*N_domain+N_boundary+1:3*N_domain+N_boundary]
         end
     end
     @info "[solver finished]"

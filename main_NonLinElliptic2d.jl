@@ -287,7 +287,7 @@ function main(args)
     Ω = [[0,1] [0,1]]
     # ground truth solution
     freq = 600
-    s = 3.5
+    s = 6
     function fun_u(x)
         ans = 0
         @inbounds for k = 1:freq

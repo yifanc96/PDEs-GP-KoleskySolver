@@ -1,14 +1,14 @@
 using JLD
 using Printf
 
-result = load("NonlinElliptic2d_data.jld")["result"]
+result = load("NonlinElliptic2d_data_freq600s6.jld")["result"]
 
-# arr_kernel = ["Matern5half", "Matern7half", "Matern9half"]
+arr_kernel = ["Matern5half", "Matern7half", "Matern9half"]
 
-arr_kernel = ["Matern5half"]
+# arr_kernel = ["Matern5half"]
 arr_h = [0.02,0.01,0.005,0.0025]
-arr_ρ = [2.0, 3.0, 4.0]
-
+# arr_ρ = [2.0, 3.0, 4.0]
+arr_ρ = [4.0]
 
 data = Dict()
 
@@ -85,7 +85,9 @@ plt.xlabel(L"$N_{\mathrm{domain}}}$")
 plt.ylabel(L"$L^{2}$ error")
 plt.title(L"Solution Accuracy $L^{2}$")
 plt.legend()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 display(plotL2)
+plotL2.savefig("L2err_Cholesky_elliptic.pdf", bbox_inches="tight",dpi=100,pad_inches=0.15)
 
 plotLinf = plt.figure()
 ax = plotLinf.add_subplot(111)
@@ -104,6 +106,7 @@ plt.xlabel(L"$N_{\mathrm{domain}}}$")
 plt.ylabel(L"$L^{\infty}$ error")
 plt.title(L"Solution Accuracy $L^{\infty}$")
 plt.legend()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 display(plotLinf)
 
 plottime = plt.figure()
@@ -120,10 +123,13 @@ end
 plt.xscale("log")
 plt.yscale("log")
 plt.xlabel(L"$N_{\mathrm{domain}}}$")
-plt.ylabel("Time")
+plt.ylabel("Time (s)")
 plt.title("Computational Efficiency")
 plt.legend()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 display(plottime)
+plottime.savefig("time_Cholesky_elliptic.pdf", bbox_inches="tight",dpi=100,pad_inches=0.15)
+
 
 plottradeoff = plt.figure()
 ax = plottradeoff.add_subplot(111)
@@ -142,4 +148,6 @@ plt.xlabel("Time")
 plt.ylabel(L"$L^{2}$ error")
 plt.title("Speed–Accuracy Tradeoff")
 plt.legend()
+# plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 display(plottradeoff)
+
