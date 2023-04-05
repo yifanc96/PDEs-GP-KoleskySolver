@@ -1,5 +1,5 @@
 # PDEs-GP-KoleskySolver
-Code for the paper [Solving and Learning Nonlinear PDEs with Gaussian Processes](https://arxiv.org/abs/2304.01294)
+Code for the paper [Sparse Cholesky Factorization for Solving Nonlinear PDEs via Gaussian Processes](https://arxiv.org/abs/2304.01294)
 
 This code is built on the package https://github.com/f-t-s/KoLesky.jl
 
