@@ -22,8 +22,6 @@ using Logging
 using ForwardDiff
 using FastGaussQuadrature
 
-# profile
-using Plots
 
 
 # solving Burgers: u_t+ u u_x- nu u_xx=0
@@ -33,7 +31,8 @@ function parse_commandline()
         "--nu"
             help = "ν"
             arg_type = Float64
-            default = 0.01/π
+            # default = 0.01/π
+            default = 0.001
         "--kernel"
             arg_type = String
             default = "Matern7half"
@@ -48,7 +47,7 @@ function parse_commandline()
         "--dt"
             help = "time step size"
             arg_type = Float64
-            default = 0.01
+            default = 0.02
         "--T"
             help = "final time"
             arg_type = Float64
@@ -338,98 +337,134 @@ function SolveBurgers_ColeHopf(x,t,ν)
     return -sum(val1)/sum(val2)
 end
 
-function main(args)
-    ν = args.nu
-    # ground truth solution
-    function fun_u(x)
-        return -sin(π*x)
-    end
-
-    function grad_u(x)
-        return ForwardDiff.derivative(fun_u, x)
-    end
-
-    function Delta_u(x)
-        return ForwardDiff.derivative(grad_u, x)
-    end
-
-    # right hand side
-    function fun_rhs(x)
-        return 0.0
-    end
-
-    # boundary value
-    function fun_bdy(x)
-        return 0.0
-    end
-
-    @info "[solver started] Burgers 1d"
-    @info "[equation] u_t+ u u_x- $ν u_xx=0"
-    eqn = Burgers1d(ν,fun_bdy,fun_rhs,fun_u,grad_u,Delta_u)
-    
-    h_in = args.h::Float64
-    X_domain, X_boundary = sample_points_grid(eqn, h_in)
-    N_domain = length(X_domain)
-    N_boundary = length(X_boundary)
-    @info "[sample points] grid size $h_in"
-    @info "[sample points] N_domain is $N_domain, N_boundary is $N_boundary"  
-
-    lengthscale = args.sigma
-    if args.kernel == "Matern5half"
-        cov = KoLesky.MaternCovariance5_2(lengthscale)
-    elseif args.kernel == "Matern7half"
-        cov = KoLesky.MaternCovariance7_2(lengthscale)
-    elseif args.kernel == "Matern9half"
-        cov = KoLesky.MaternCovariance9_2(lengthscale)
-    elseif args.kernel == "Matern11half"
-        cov = KoLesky.MaternCovariance11_2(lengthscale)
-    elseif args.kernel == "Gaussian"
-        cov = KoLesky.GaussianCovariance(lengthscale)
-    end
-    @info "[kernel] choose $(args.kernel), lengthscale $lengthscale\n"  
-
-    nugget = args.nugget::Float64
-    @info "[nugget] $nugget" 
-
-    dt = args.dt::Float64
-    T = args.T::Float64
-
-    
-    GNsteps_approximate = args.GNsteps::Int
-    @info "[total GN steps] $GNsteps_approximate" 
-
-    ρ_big = args.rho_big::Float64
-    ρ_small = args.rho_small::Float64
-    k_neighbors = args.k_neighbors::Int
-    @info "[Fast Cholesky] ρ_big = $ρ_big, ρ_small = $ρ_small, k_neighbors = $k_neighbors"
-
-
-
-    fast_solve() = @time iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, dt, T, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
-    sol = fast_solve()
-
-    truth =  [SolveBurgers_ColeHopf(X_domain[i],T,ν) for i in 1:N_domain]
-    pts_accuracy = sqrt(sum((truth-sol).^2)/N_domain)
-    @info "[L2 accuracy: pCG method] $pts_accuracy"
-    pts_max_accuracy = maximum(abs.(truth-sol))
-    @info "[Linf accuracy: pCG method] $pts_max_accuracy"
-
-    plot(X_domain,truth)
-    plot!(X_domain, sol)
-    if args.compare_exact
-        GNsteps_exact = 2
-        @info "[comparison: exact method]"
-        @time sol_exact = iterGPR_exact(eqn, cov, X_domain, X_boundary, nugget, dt, T, GNsteps_exact)
-        pts_accuracy_exact = sqrt(sum((truth-sol_exact).^2)/N_domain)
-        @info "[L2 accuracy: exact method] $pts_accuracy_exact"
-        pts_max_accuracy_exact = maximum(abs.(truth-sol_exact))
-        @info "[Linf accuracy: exact method] $pts_max_accuracy_exact"
-        plot!(X_domain,sol_exact)
-    end
-
-    
-end
 
 args = parse_commandline()
 args = (; (Symbol(k) => v for (k,v) in args)...) # Named tuple from dict
-main(args)
+# main(args)
+
+
+# function main(args)
+ν = args.nu
+# ground truth solution
+function fun_u(x)
+    return -sin(π*x)
+end
+
+function grad_u(x)
+    return ForwardDiff.derivative(fun_u, x)
+end
+
+function Delta_u(x)
+    return ForwardDiff.derivative(grad_u, x)
+end
+
+# right hand side
+function fun_rhs(x)
+    return 0.0
+end
+
+# boundary value
+function fun_bdy(x)
+    return 0.0
+end
+
+@info "[solver started] Burgers 1d"
+@info "[equation] u_t+ u u_x- $ν u_xx=0"
+eqn = Burgers1d(ν,fun_bdy,fun_rhs,fun_u,grad_u,Delta_u)
+
+h_in = args.h::Float64
+X_domain, X_boundary = sample_points_grid(eqn, h_in)
+N_domain = length(X_domain)
+N_boundary = length(X_boundary)
+@info "[sample points] grid size $h_in"
+@info "[sample points] N_domain is $N_domain, N_boundary is $N_boundary"  
+
+lengthscale = args.sigma
+if args.kernel == "Matern5half"
+    cov = KoLesky.MaternCovariance5_2(lengthscale)
+elseif args.kernel == "Matern7half"
+    cov = KoLesky.MaternCovariance7_2(lengthscale)
+elseif args.kernel == "Matern9half"
+    cov = KoLesky.MaternCovariance9_2(lengthscale)
+elseif args.kernel == "Matern11half"
+    cov = KoLesky.MaternCovariance11_2(lengthscale)
+elseif args.kernel == "Gaussian"
+    cov = KoLesky.GaussianCovariance(lengthscale)
+end
+@info "[kernel] choose $(args.kernel), lengthscale $lengthscale\n"  
+
+nugget = args.nugget::Float64
+@info "[nugget] $nugget" 
+
+dt = args.dt::Float64
+T = args.T::Float64
+
+
+GNsteps_approximate = args.GNsteps::Int
+@info "[total GN steps] $GNsteps_approximate" 
+
+ρ_big = args.rho_big::Float64
+ρ_small = args.rho_small::Float64
+k_neighbors = args.k_neighbors::Int
+@info "[Fast Cholesky] ρ_big = $ρ_big, ρ_small = $ρ_small, k_neighbors = $k_neighbors"
+
+
+
+fast_solve() = @time iterGPR_fast_pcg(eqn, cov, X_domain, X_boundary, dt, T, nugget, GNsteps_approximate; ρ_big = ρ_big, ρ_small = ρ_small, k_neighbors=k_neighbors);
+sol = fast_solve()
+
+truth =  [SolveBurgers_ColeHopf(X_domain[i],T,ν) for i in 1:N_domain]
+pts_accuracy = sqrt(sum((truth-sol).^2)/N_domain)
+@info "[L2 accuracy: pCG method] $pts_accuracy"
+pts_max_accuracy = maximum(abs.(truth-sol))
+@info "[Linf accuracy: pCG method] $pts_max_accuracy"
+
+if args.compare_exact
+    GNsteps_exact = 2
+    @info "[comparison: exact method]"
+    @time sol_exact = iterGPR_exact(eqn, cov, X_domain, X_boundary, nugget, dt, T, GNsteps_exact)
+    pts_accuracy_exact = sqrt(sum((truth-sol_exact).^2)/N_domain)
+    @info "[L2 accuracy: exact method] $pts_accuracy_exact"
+    pts_max_accuracy_exact = maximum(abs.(truth-sol_exact))
+    @info "[Linf accuracy: exact method] $pts_max_accuracy_exact"
+    plot!(X_domain,sol_exact)
+end
+
+
+using PyCall
+using PyPlot
+function burgers_plot(X_domain,truth,sol)
+    fsize = 15.0
+    tsize = 15.0
+    tdir = "in"
+    major = 5.0
+    minor = 3.0
+    lwidth = 0.8
+    lhandle = 2.0
+    plt.style.use("default")
+    rcParams = PyDict(matplotlib["rcParams"])
+    rcParams["font.size"] = fsize
+    rcParams["legend.fontsize"] = tsize
+    rcParams["xtick.direction"] = tdir
+    rcParams["ytick.direction"] = tdir
+    rcParams["xtick.major.size"] = major
+    rcParams["xtick.minor.size"] = minor
+    rcParams["ytick.major.size"] = 5.0
+    rcParams["ytick.minor.size"] = 3.0
+    rcParams["axes.linewidth"] = lwidth
+    rcParams["legend.handlelength"] = lhandle
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(X_domain,truth, "-", linewidth=2.5, label="true sol")
+    ax.plot(X_domain, sol, linestyle="dashed", linewidth=2.5, color="red", label="numeric sol")
+    ax.legend()
+    plt.xlabel(L"$x$")
+    display(fig)
+
+    fig.savefig("burgers_solution.pdf", bbox_inches="tight",dpi=100,pad_inches=0.15)
+end
+burgers_plot(X_domain,truth,sol)
+
+
+
+    

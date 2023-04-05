@@ -43,7 +43,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.02
+            default = 0.01
         "--nugget"
             arg_type = Float64
             default = 1e-15
@@ -62,7 +62,7 @@ function parse_commandline()
             default = 3
         "--compare_exact"
             arg_type = Bool
-            default = true
+            default = false
     end
     return parse_args(s)
 end

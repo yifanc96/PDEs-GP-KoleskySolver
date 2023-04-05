@@ -28,5 +28,8 @@ docs/site/
 *_order*
 *cache1*
 *jld*
-old/*
-*.ipynb*
+/old/*
+# *.ipynb*
+*checkpoints
+*.pdf
+*_*_*.jl

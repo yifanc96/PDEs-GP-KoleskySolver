@@ -1,5 +1,5 @@
-using Pkg
-Pkg.activate(@__DIR__)
+# using Pkg
+# Pkg.activate(@__DIR__)
 
 # For linear algebra
 using StaticArrays: SVector 
@@ -43,7 +43,7 @@ function parse_commandline()
         "--h"
             help = "grid size"
             arg_type = Float64
-            default = 0.02
+            default = 0.005
         "--nugget"
             arg_type = Float64
             default = 1e-10
