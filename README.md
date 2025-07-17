@@ -7,6 +7,7 @@ You can run the `.jl` files to see the performance of the algorithm for several 
 
 The folder `screening_effect_demo` contains the notebook for demonstrating the screening effects
 
+```
 @article{chen2025sparse,
   title={Sparse Cholesky factorization for solving nonlinear PDEs via Gaussian processes},
   author={Chen, Yifan and Owhadi, Houman and Sch{\"a}fer, Florian},
@@ -16,3 +17,4 @@ The folder `screening_effect_demo` contains the notebook for demonstrating the s
   pages={1235--1280},
   year={2025}
 }
+```
